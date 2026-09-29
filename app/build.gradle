@@ -14,6 +14,9 @@ android {
         // published APK installs over the previous one.
         versionCode (project.hasProperty('versionCode') ? project.versionCode.toInteger() : 1)
         versionName (project.hasProperty('versionName') ? project.versionName : '0.1')
+        // -PapplicationIdSuffix=.dev installs a local build next to the
+        // release-signed one instead of over it (different signing keys).
+        if (project.hasProperty('applicationIdSuffix')) applicationIdSuffix project.applicationIdSuffix
     }
 
     compileOptions {
