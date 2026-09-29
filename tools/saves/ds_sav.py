@@ -1,16 +1,14 @@
 """Parser for Nintendo DS Chrono Trigger `.sav` (64 KB EEPROM) saves.
 
-See REPORT.md #7 for the full format spec this module implements. One
-correction versus that section, found while validating against the fixture
-(`ds/chrono-trigger.22851.dst`): the table lists the character-record block
-as starting at DS slot offset 0x480, but in the fixture the 7 records
-actually start at **0x484** -- the `u32 id` field (0, 1, .. 6) and the
-`80 86 90 xx` per-character constant land at DS-record-relative +0x00/+0x04
-exactly as documented, they're just 4 bytes further into the slot than the
-table's "DS slot" column says. Everything downstream (inventory at 0x724
-onward, tech block at 0xC90, names at 0xCC0, party/gold/time/etc.) already
-lines up with base 0x484 + 7*0x60 = 0x724, so only that one start offset was
-off; nothing else in #7 needed correcting against this fixture.
+See REPORT.md #7 for the full format spec this module implements. From
+0x04F up to the character records the DS slot is the port payload shifted
+by 0x4F: DS 0x04F + p == port payload byte p. So region A starts at 0x04F,
+the event flags at 0x24F and the scene block at 0x44F (an earlier version
+read them one byte late, at 0x050/0x250/0x450, which shifted every flag
+byte and made every mid-game DS save match the Millennial Fair template).
+The DS scene block is 0x35 bytes against the port's 0x30 -- three extra
+bytes interleaved plus a 2-byte trailer, see `scene_to_port` -- which is
+why the 7 character records start at 0x484.
 
 Wrappers stripped before parsing (REPORT.md #7):
   - Action Replay DS export: 500-byte `ARDS` header, file size 262644 (or
@@ -41,17 +39,17 @@ DESMUME_SIGNATURE = b"|-DESMUME SAVE-|"
 
 SLOT_MAGIC = 0xFEDCBA98  # the last-saved slot's u32 at offset 0 (little-endian on disk: 98 BA DC FE)
 
-# Corrected vs. REPORT.md #7's table (see module docstring): the 7 character
-# records actually start here, not at slot offset 0x480.
+# DS 0x04F + p == port payload byte p up to the character records (see
+# module docstring).
 CHAR_BLOCK_OFF = 0x484
 CHAR_SIZE = 0x60
 NUM_CHARS = 7
 
-FLAGS_OFF = 0x250
+FLAGS_OFF = 0x24F
 FLAGS_SIZE = 0x200
-SCENE_OFF = 0x450
-SCENE_SIZE = 0x30
-REGION_A_OFF = 0x050
+SCENE_OFF = 0x44F
+SCENE_SIZE = 0x35
+REGION_A_OFF = 0x04F
 REGION_A_SIZE = 0x200
 
 TECH_BLOCK_OFF = 0xC90
@@ -151,14 +149,27 @@ class DsChar:
         )
 
 
+def scene_to_port(scene: bytes) -> bytes:
+    """DS 0x35-byte scene block -> the port's 0x30-byte block at payload 0x400.
+
+    Same fields, but the DS inserts one extra byte after each of the first
+    three 5-6 byte groups (current map u16 + x, y, facing; two more
+    map/x/y/facing groups) and ends with a 2-byte trailer before the
+    character records. Found by lining up End of Time saves
+    (ds/chrono-trigger.22851.dst slot 2 vs steam/09_theendoftime.bin).
+    """
+    assert len(scene) == SCENE_SIZE
+    return bytes(scene[0:6] + scene[7:12] + scene[13:18] + scene[19:51])
+
+
 @dataclass
 class DsSlot:
     raw: bytes  # full 0x2800-byte slot
     used: bool
     is_last_saved: bool
-    region_a: bytes  # 0x200 bytes at 0x050
-    flags: bytes  # 0x200 bytes at 0x250 (event flags)
-    scene_block: bytes  # 0x30 bytes at 0x450
+    region_a: bytes  # 0x200 bytes at 0x04F
+    flags: bytes  # 0x200 bytes at 0x24F (event flags)
+    scene_block: bytes  # 0x35 bytes at 0x44F (see scene_to_port)
     chars: list  # 7 DsChar, Crono..Magus
     inventory: dict  # section name -> list[(idx, count)]
     tech_block: bytes  # 45 bytes at 0xC90

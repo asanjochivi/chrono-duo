@@ -200,9 +200,9 @@ positional (port offsets for default names):
 
 | DS slot | Size | Port | Field |
 |---|---|---|---|
-| 0x050 | 0x200 | 0x001 | region A (u8 each; the port widens to u32 in memory) — DS 0x24E = 3 = port 0x1FF |
-| 0x250 | 0x200 | 0x201 | event flags (427/512 bytes equal to a *different* 100 % game's template) |
-| 0x450 | 0x30 | 0x401 | scene block: u16 location id (0x1D0 = End of Time), u8 x, u8 y, … |
+| 0x04F | 0x200 | 0x000 | region A (u8 each; the port widens to u32 in memory) — DS 0x24E = 3 = port 0x1FF. From here to the character records, DS 0x04F + p = port payload byte p |
+| 0x24F | 0x200 | 0x200 | event flags, verbatim. (Read one byte late at 0x250 until 2026-09-30: every flag shifted, so every mid-game DS save matched the Millennial Fair template and spawned at the game's start) |
+| 0x44F | 0x35 | 0x400 (0x30) | scene block: byte 0, u16 map id (0x1D0 = End of Time, 0x1F0+n = overworld n), u8 x, u8 y, u8 facing, then two more map/x/y/facing groups and the rest. The DS inserts one extra byte after each of the first three groups and a 2-byte trailer: port[0:6]=DS[0:6], port[6:11]=DS[7:12], port[11:16]=DS[13:18], port[16:48]=DS[19:51] |
 | 0x484 | 7×0x60 | 0x430 (7×0x58) | character records: `u32 id ‖ 80 86 90 57 ‖` then **identical** to the port record from max HP on, except a u16 between level and exp that the port drops (see below) |
 | 0x724 | 111×4 | 0x698 | weapons `{u16 (cat<<12\|idx), u16 count}` — same ids as the port, 4-byte entries instead of 3 |
 | 0x8E0 | 50×4 | 0x7E5 | armour |
@@ -233,8 +233,9 @@ port +0x1A; DS +0x24..+0x35 zeros; DS +0x36 4×u16 equipment = port +0x2C; DS +0
 DS +0x51 4 bytes = port +0x47; rest zero.
 
 Conversion = the same template overlay as SNES (§5), overlaying flags, characters, all six
-inventory sections, techs, names, party/reserve/recruited, gold, play time, location-name id
-and era mask. Region A / scene block / tail stay with the template for now (untested whether
-copying the DS ones verbatim also works; it probably does since the struct is the same).
+inventory sections, techs, names, party/reserve/recruited, gold, play time, location-name id,
+era mask and the scene block (de-interleaved as above, so the game resumes on the saved map).
+Region A and the tail stay with the template (untested whether copying the DS region A verbatim
+also works).
 Slot "used" test: u16 at +0x484+8 (Crono max HP) not 0 or 0xFFFF (unused slots are 0xFF-filled) nonzero and names decodable; do not rely on
 the magic.

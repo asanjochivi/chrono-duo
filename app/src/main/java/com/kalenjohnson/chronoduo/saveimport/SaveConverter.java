@@ -221,8 +221,9 @@ public final class SaveConverter {
      * Unlike {@link #snesToCt}, the DS struct is positionally the same as
      * the port's: equipment/inventory ids are already in the port's
      * (category&lt;&lt;12)|idx encoding, HP/MP are already max-first, and
-     * all 10 names plus location-name id and era mask come straight from
-     * the DS slot rather than being left to the template.
+     * all 10 names plus location-name id, era mask and the scene block
+     * (map + position) come straight from the DS slot rather than being
+     * left to the template.
      */
     public static CtSave dsToCt(DsSav.DsSlot slot, CtSave template) {
         CtSave out = template.deepCopy();
@@ -283,6 +284,10 @@ public final class SaveConverter {
         out.playTimeSeconds = slot.playTimeSeconds;
         out.locationNameId = slot.locationNameId;
         out.eraMask = slot.eraMask;
+
+        // Scene block (current map + position): from the DS slot, so the game
+        // resumes where it was saved rather than at the template's spot.
+        out.block400 = DsSav.sceneToPort(slot.sceneBlock);
 
         // Payload byte 0 is the format version: the Android loader accepts only 1
         // (the Steam templates carry 3) -- REPORT.md #3.1.

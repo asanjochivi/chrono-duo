@@ -237,6 +237,10 @@ def ds_to_ct(slot: "ds_sav.DsSlot", template: ctsave.CtSave) -> ctsave.CtSave:
     out.location_name_id = slot.location_name_id
     out.era_mask = slot.era_mask
 
+    # Scene block (current map + position): from the DS slot, so the game
+    # resumes where it was saved rather than at the template's spot.
+    out.block_400 = bytearray(ds_sav.scene_to_port(slot.scene_block))
+
     # Payload byte 0 is the format version: the Android loader accepts only 1
     # (the Steam templates carry 3) -- REPORT.md #3.1.
     out.region_a[0] = 1

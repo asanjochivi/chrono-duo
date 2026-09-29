@@ -10,10 +10,10 @@ import java.util.Map;
 /**
  * Parser for Nintendo DS Chrono Trigger {@code .sav} (64 KB EEPROM) saves,
  * ported byte-for-byte from tools/saves/ds_sav.py. See REPORT.md #7 for the
- * format -- with one correction found validating against the fixture: the
- * 7 character records actually start at DS slot offset 0x484, not the 0x480
- * the table names (everything downstream, from the inventory at 0x724 on,
- * already lines up with 0x484 + 7*0x60 = 0x724).
+ * format. From 0x04F up to the character records the DS slot is the port
+ * payload shifted by 0x4F (DS 0x04F + p == port payload byte p); the DS
+ * scene block is 0x35 bytes against the port's 0x30 (see
+ * {@link #sceneToPort}), which is why the 7 character records start at 0x484.
  */
 public final class DsSav {
     public static final int SLOT_SIZE = 0x2800;
@@ -35,17 +35,16 @@ public final class DsSav {
 
     private static final long SLOT_MAGIC = 0xFEDCBA98L;
 
-    // Corrected vs. REPORT.md #7's table (see class doc): records actually
-    // start here.
+    // DS 0x04F + p == port payload byte p up to here (see class doc).
     private static final int CHAR_BLOCK_OFF = 0x484;
     private static final int CHAR_SIZE = 0x60;
     private static final int NUM_CHARS = 7;
 
-    private static final int FLAGS_OFF = 0x250;
+    private static final int FLAGS_OFF = 0x24F;
     private static final int FLAGS_SIZE = 0x200;
-    private static final int SCENE_OFF = 0x450;
-    private static final int SCENE_SIZE = 0x30;
-    private static final int REGION_A_OFF = 0x050;
+    private static final int SCENE_OFF = 0x44F;
+    private static final int SCENE_SIZE = 0x35;
+    private static final int REGION_A_OFF = 0x04F;
     private static final int REGION_A_SIZE = 0x200;
 
     private static final int TECH_BLOCK_OFF = 0xC90;
@@ -98,6 +97,22 @@ public final class DsSav {
             throw new AssertionError(e);
         }
         return Normalizer.normalize(s, Normalizer.Form.NFKC);
+    }
+
+    /**
+     * DS 0x35-byte scene block -> the port's 0x30-byte block at payload
+     * 0x400 ({@link CtSave#block400}). Same fields, but the DS inserts one
+     * extra byte after each of the first three map/x/y/facing groups and
+     * ends with a 2-byte trailer (REPORT.md #7).
+     */
+    public static byte[] sceneToPort(byte[] scene) {
+        if (scene.length != SCENE_SIZE) throw new IllegalArgumentException("bad DS scene block size");
+        byte[] out = new byte[CtSave.BLOCK_400_SIZE];
+        System.arraycopy(scene, 0, out, 0, 6);
+        System.arraycopy(scene, 7, out, 6, 5);
+        System.arraycopy(scene, 13, out, 11, 5);
+        System.arraycopy(scene, 19, out, 16, 32);
+        return out;
     }
 
     public static final class DsChar {
