@@ -266,6 +266,18 @@ public class AppActivity extends Cocos2dxActivity {
             Log.e(TAG, "boot mod scan failed", t);
         }
         updateModsStatus(false, null);
+        // ChronoDuo's host process can detect English even when the official app
+        // detects Spanish. As a non-invasive fallback, redirect only missing
+        // English localization resource reads to the matching Spanish archive
+        // entries. The original APK/archive and save files remain untouched.
+        try {
+            java.util.Map<String, java.io.File> spanishAliases =
+                    com.kalenjohnson.chronoduo.ChronoResources.extractSpanishAliases(
+                            this, runtime.getChronoAssets());
+            if (modManager != null) modManager.registerSpanishAliases(spanishAliases);
+        } catch (Exception e) {
+            Log.e(TAG, "Spanish localization fallback setup failed; using normal game language", e);
+        }
         extractCompanionAssets();
         loadModCatalog();
         // A .ctp opened from outside (browser download, file manager, "Open

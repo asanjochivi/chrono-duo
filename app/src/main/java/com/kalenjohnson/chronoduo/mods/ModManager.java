@@ -565,6 +565,37 @@ public final class ModManager {
      * as well as at boot. Returns the number of file substitutions
      * registered natively.
      */
+    /**
+     * Adds the Spanish localization fallback paths while preserving user mods.
+     * Explicit user-mod entries win if they target the same English resource.
+     */
+    public int registerSpanishAliases(Map<String, File> aliases) {
+        Map<String, String> merged = new java.util.LinkedHashMap<>();
+        if (aliases != null) {
+            for (Map.Entry<String, File> entry : aliases.entrySet()) {
+                File file = entry.getValue();
+                if (entry.getKey() != null && file != null && file.isFile()) {
+                    merged.put(entry.getKey(), file.getAbsolutePath());
+                }
+            }
+        }
+        ScanResult result = lastResult;
+        if (result != null) {
+            for (int i = 0; i < result.archivePaths.length; i++) {
+                // User mods deliberately override the automatic language fallback.
+                merged.put(result.archivePaths[i], result.diskPaths[i]);
+            }
+        }
+        String[] archivePaths = merged.keySet().toArray(new String[0]);
+        String[] diskPaths = merged.values().toArray(new String[0]);
+        int registered = com.kalenjohnson.chronoduo.GameState.nativeRegisterModSubstitutions(
+                archivePaths, diskPaths);
+        Log.i(TAG, "Spanish localization fallback registered with " + registered
+                + " combined substitutions (" + (aliases == null ? 0 : aliases.size())
+                + " language aliases)");
+        return registered;
+    }
+
     public int scan() {
         ScanResult result = collect(root);
         lastResult = result;

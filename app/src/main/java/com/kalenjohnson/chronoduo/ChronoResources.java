@@ -81,6 +81,34 @@ public final class ChronoResources {
     }
 
     /**
+     * Builds a safe runtime fallback map from English localization paths to the
+     * matching Spanish files inside the official game's own resources.bin.
+     * The archive itself is never modified; extracted files live in ChronoDuo's
+     * private cache and are only used when the engine requests Localize/en/*.
+     */
+    public static synchronized Map<String, File> extractSpanishAliases(
+            Context ctx, AssetManager gameAssets) throws IOException {
+        if (table == null) table = parseTable(gameAssets);
+        Map<String, File> aliases = new HashMap<>();
+        final String spanishPrefix = "Localize/es/";
+        final String englishPrefix = "Localize/en/";
+        for (String spanishName : table.keySet()) {
+            if (!spanishName.startsWith(spanishPrefix)) continue;
+            String englishName = englishPrefix + spanishName.substring(spanishPrefix.length());
+            if (!table.containsKey(englishName)) continue;
+            try {
+                File spanishFile = extract(ctx, gameAssets, spanishName);
+                aliases.put(englishName, spanishFile);
+            } catch (IOException e) {
+                Log.w(TAG, "Spanish localization fallback skipped " + spanishName, e);
+            }
+        }
+        Log.i(TAG, "Spanish localization fallback prepared for " + aliases.size()
+                + " English resource paths");
+        return aliases;
+    }
+
+    /**
      * Batch form for bootstrap-time extraction. Best-effort: entries that fail
      * (missing, archive unreadable, etc.) are logged and left out of the
      * result rather than aborting the whole batch. Always the unmodded
