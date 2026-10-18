@@ -49,7 +49,7 @@ jobs:
         run: |
           ./gradlew --no-daemon -Dorg.gradle.java.home="$JAVA_HOME" \
             -PversionCode="$GITHUB_RUN_NUMBER" -PversionName="${{ steps.ver.outputs.name }}" \
-            assembleRelease
+            -PapplicationIdSuffix=.es-test assembleRelease
           cp app/build/outputs/apk/release/app-release.apk "ChronoDuo-${{ steps.ver.outputs.name }}.apk"
 
       - uses: actions/upload-artifact@v7
