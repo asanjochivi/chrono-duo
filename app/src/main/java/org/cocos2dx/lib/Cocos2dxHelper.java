@@ -229,7 +229,7 @@ public class Cocos2dxHelper {
     }
 
     public static String getCurrentLanguage() {
-        return Locale.getDefault().getLanguage();
+        return "es";
     }
     
     public static String getDeviceModel(){
