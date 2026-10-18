@@ -182,25 +182,80 @@ static int plausible_ptr(void *p) {
     return v > 0x1000000ull && v < (1ull << 48) && (v & 7) == 0;
 }
 
+// Patch the engine's two native language getters, not just its mutable
+// DeviceInfo field. The engine may overwrite that field during startup, and
+// getLocalizeResourcePath() reads it directly. ct_nx documents these exact
+// AArch64 instruction sites for the same Android libchrono.so build.
+// We verify each original instruction before modifying it and restore RX
+// permissions immediately; unexpected engine versions are left untouched.
+static int patch_language_instruction(void *handle, const char *symbol,
+                                     size_t offset, uint32_t expected,
+                                     uint32_t replacement) {
+    uint8_t *fn = (uint8_t *)dlsym(handle, symbol);
+    if (!fn) {
+        LOGE("Spanish language patch: symbol missing: %s", symbol);
+        return 0;
+    }
+
+    uint32_t *site = (uint32_t *)(fn + offset);
+    uint32_t actual;
+    memcpy(&actual, site, sizeof(actual));
+    if (actual != expected) {
+        LOGE("Spanish language patch: %s instruction mismatch at +0x%zx: 0x%08x",
+             symbol, offset, actual);
+        return 0;
+    }
+
+    long page_size = sysconf(_SC_PAGESIZE);
+    if (page_size <= 0) return 0;
+    uintptr_t page = (uintptr_t)site & ~((uintptr_t)page_size - 1);
+    if (mprotect((void *)page, (size_t)page_size, PROT_READ | PROT_WRITE) != 0) {
+        LOGE("Spanish language patch: mprotect RW failed for %s (errno=%d)",
+             symbol, errno);
+        return 0;
+    }
+
+    *site = replacement;
+    __builtin___clear_cache((char *)site, (char *)site + sizeof(*site));
+
+    if (mprotect((void *)page, (size_t)page_size, PROT_READ | PROT_EXEC) != 0) {
+        LOGE("Spanish language patch: could not restore RX for %s (errno=%d)",
+             symbol, errno);
+        return 0;
+    }
+    LOGI("Spanish language patch applied: %s +0x%zx", symbol, offset);
+    return 1;
+}
+
+static void force_native_spanish(void *handle) {
+    int *current_language =
+        (int *)dlsym(handle, "_ZN10DeviceInfo16mCurrentLanguageE");
+    if (current_language) {
+        *current_language = 4; // LocalizationLanguageType::Spanish
+        LOGI("Set DeviceInfo::mCurrentLanguage to Spanish (4)");
+    } else {
+        LOGE("Spanish language patch: DeviceInfo::mCurrentLanguage not found");
+    }
+
+    // AArch64: ldr w0,[x8] -> movz w0,#4
+    patch_language_instruction(handle,
+        "_ZN10DeviceInfo18getCurrentLanguageEv", 0x8,
+        0xB9400100u, 0x52800080u);
+
+    // AArch64: ldrsw x9,[x9] -> movz x9,#4
+    patch_language_instruction(handle,
+        "_ZN10DeviceInfo23getLocalizeResourcePathEv", 0x20,
+        0xB9800129u, 0xD2800089u);
+}
+
 JNIEXPORT jboolean JNICALL
 Java_com_kalenjohnson_chronoduo_GameState_nativeAttach(JNIEnv *env, jclass cls) {
     void *h = dlopen("libchrono.so", RTLD_NOW | RTLD_NOLOAD);
     if (!h) h = RTLD_DEFAULT;
 
-    // Chrono Trigger's native engine does not use Cocos2dxHelper.getCurrentLanguage()
-    // to choose its localization resources. It reads DeviceInfo::mCurrentLanguage
-    // directly (enum index: ja=0, en=1, de=2, it=3, es=4, fr=5, zh-Hans=6,
-    // zh-Hant=7, ko=8). Pin the engine's own selector to Spanish before the
-    // first GL-thread nativeInit/title-scene setup. This is intentionally
-    // applied only inside ChronoDuo's process; the official game's APK/data
-    // and save files are not modified.
-    int *current_language = (int *)dlsym(h, "_ZN10DeviceInfo16mCurrentLanguageE");
-    if (current_language) {
-        *current_language = 4;
-        LOGI("Forced Chrono Trigger native language to Spanish (index 4)");
-    } else {
-        LOGE("Could not resolve DeviceInfo::mCurrentLanguage; language remains system-selected");
-    }
+    // The mutable field alone is insufficient: the engine can overwrite it
+    // during startup. Pin both native getters to the Spanish resource index.
+    force_native_spanish(h);
     p_getInstance = (void *(*)(void)) dlsym(h, "_ZN12ChronoCanvas11getInstanceEv");
     if (p_getInstance) {
         Dl_info info;
