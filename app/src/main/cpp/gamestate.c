@@ -186,6 +186,21 @@ JNIEXPORT jboolean JNICALL
 Java_com_kalenjohnson_chronoduo_GameState_nativeAttach(JNIEnv *env, jclass cls) {
     void *h = dlopen("libchrono.so", RTLD_NOW | RTLD_NOLOAD);
     if (!h) h = RTLD_DEFAULT;
+
+    // Chrono Trigger's native engine does not use Cocos2dxHelper.getCurrentLanguage()
+    // to choose its localization resources. It reads DeviceInfo::mCurrentLanguage
+    // directly (enum index: ja=0, en=1, de=2, it=3, es=4, fr=5, zh-Hans=6,
+    // zh-Hant=7, ko=8). Pin the engine's own selector to Spanish before the
+    // first GL-thread nativeInit/title-scene setup. This is intentionally
+    // applied only inside ChronoDuo's process; the official game's APK/data
+    // and save files are not modified.
+    int *current_language = (int *)dlsym(h, "_ZN10DeviceInfo16mCurrentLanguageE");
+    if (current_language) {
+        *current_language = 4;
+        LOGI("Forced Chrono Trigger native language to Spanish (index 4)");
+    } else {
+        LOGE("Could not resolve DeviceInfo::mCurrentLanguage; language remains system-selected");
+    }
     p_getInstance = (void *(*)(void)) dlsym(h, "_ZN12ChronoCanvas11getInstanceEv");
     if (p_getInstance) {
         Dl_info info;
